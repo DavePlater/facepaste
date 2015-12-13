@@ -447,15 +447,27 @@ function begin_scrolling(callback, event) {
 function handle_album_index(a, ai) {
 	a.log('parsing album index');
 	var bcd = browser.contentDocument;
+	//CHANGES 12/12/2015 The videos aren't marked by uiVideoLink anymore, but by theater and "videso" in the url i think?
+	var video_links=_(bcd.querySelectorAll("a")).filter( function(x) { return (x.rel=="theater")&&(x.href.indexOf("videos")!=-1);});
 	var photo_page_links = _(bcd.querySelectorAll(
 		'a.uiMediaThumb:not(.uiMediaThumbAlb):not(.albumThumbLink)' +
 		', a.uiVideoLink'));
 	a.log('found ' + photo_page_links.length + ' photos');
+	a.log('found ' + video_links.length + ' videos');
 	photo_page_links.forEach(function(x) {
 			var p = new Photo;
 			p.pageurl = x.href;
 			p.number = a.photos.length + 1;
 			p.video = x.classList.contains('uiVideoLink');
+			p.album = a;
+			P.push(p);
+			a.photos.push(p);
+		});
+	video_links.forEach(function(x) {
+			var p = new Photo;
+			p.pageurl = x.href;
+			p.number = a.photos.length + 1;
+			p.video = true;//x.classList.contains('uiVideoLink');
 			p.album = a;
 			P.push(p);
 			a.photos.push(p);
@@ -498,21 +510,42 @@ function get_photo(p) {
 function handle_photo_page(p, r) 
 {
 	p.log('successfully received photo page, creating photo file');
+	var orig_name="";
 	if (p.video) 
 	{
+		//document.querySelectorAll("video")[0].src; //only gets SD
 		var hdmatch = r.response.body.innerHTML.match( /hd_src\\u002522\\u00253A\\u002522(.*?)\\u002522/);
 		var sdmatch = r.response.body.innerHTML.match( /sd_src\\u002522\\u00253A\\u002522(.*?)\\u002522/);
 		p.photourl = decodeURIComponent(JSON.parse( '"' + (hdmatch || sdmatch)[1] + '"')).			replace(/\\/g, '');
+		//console.log("Found video at: "+p.photourl);
+		var myVideoURL=buildURIObject(p.photourl);
+		orig_name = myVideoURL.pathparts[myVideoURL.pathparts.length-1];
 	} 
 	else 
 	{
-		// CHANGES 12/12/2015 Finally got the FB update to how this all works
-		var link = _(r.response.querySelectorAll('a')).filter(
-			//function(x) { return (x.rel == 'ignore') && (x.className == 'fbPhotosPhotoActionsItem'); }
-			function(x) { return (x.rel == 'ignore')&&(x.href.indexOf("download")!=-1); }
-			)[0];
-		//var img = r.response.querySelector('.fbPhotoImage');
-		var img = r.response.querySelector('.spotlight');
+		// CHANGES 12/12/2015 Finally got the FB update where all of this had changed
+		// reference: function _(iterable) {	return Array.prototype.slice.call(iterable);}
+		var img;
+		var link;		
+		//console.log("I am looking at: "+p.pageurl);
+		// CHANGES 12/09/15 By Plater
+		//p.pageurl=https://www.facebook.com/photo.php?fbid=1003456761439&set=t.1201736380&type=3&src=https%3A%2F%2Fscontent-lga3-1.xx.fbcdn.net%2Fhphotos-xpf1%2Fv%2Ft1.0-9%2F197055_1003456761439_39_n.jpg%3Foh%3D23ce724b67a738736a1ee33b08e5c90b%26oe%3D56ECDD44&size=604%2C453
+		//p.photourl=https://www.facebook.com/photo/download/?fbid=1003456761439
+		//p.photourl is only like that if it finds the download link
+		//	p.photourl triggers a download of 197055_1003456761439_39_n.jpg
+		//	inside p.pageurl is an encoded version of that filename
+		//		Unencoded= https://scontent-lga3-1.xx.fbcdn.net/hphotos-xpf1/v/t1.0-9/197055_1003456761439_39_n.jpg?oh=23ce724b67a738736a1ee33b08e5c90b&oe=56ECDD44&size=604,453
+		
+		var myOURI=buildURIObject(p.pageurl);
+		var myOURI2=buildURIObject((myOURI.params["src"]||""));
+		var altphotourl=myOURI2.Org;
+		orig_name = myOURI2.pathparts[myOURI2.pathparts.length-1];
+		// There is some kind of issue with the https://www.facebook.com/photo/download/? links.
+		//		They work fine when copy/pasted into browser, but not in background I guess.
+		//		So we use the other link that was inside the URL, seems to work for me
+		p.photourl=altphotourl;
+		img={'src':altphotourl};
+		
 		if (!link && !img) 
 		{
 			p.log( 'error: no photo found on photo page, are you ' + 'accepting third party cookies?' );
@@ -526,25 +559,6 @@ function handle_photo_page(p, r)
 	p.set_status('downloading');
 	p.outfile = p.album.outdir.clone();
 	
-	// CHANGES 12/09/15 By Plater
-	//p.pageurl=https://www.facebook.com/photo.php?fbid=1003456761439&set=t.1201736380&type=3&src=https%3A%2F%2Fscontent-lga3-1.xx.fbcdn.net%2Fhphotos-xpf1%2Fv%2Ft1.0-9%2F197055_1003456761439_39_n.jpg%3Foh%3D23ce724b67a738736a1ee33b08e5c90b%26oe%3D56ECDD44&size=604%2C453
-	//p.photourl=https://www.facebook.com/photo/download/?fbid=1003456761439
-	//	p.photourl triggers a download of 197055_1003456761439_39_n.jpg
-	//	inside p.pageurl is an encoded version of that filename
-	//		Unencoded= https://scontent-lga3-1.xx.fbcdn.net/hphotos-xpf1/v/t1.0-9/197055_1003456761439_39_n.jpg?oh=23ce724b67a738736a1ee33b08e5c90b&oe=56ECDD44&size=604,453
-	
-	var myOURI=buildURIObject(p.pageurl);
-	var myOURI2=buildURIObject((myOURI.params["src"]||""));
-	var altphotourl=myOURI2.Org;
-	var orig_name = myOURI2.pathparts[myOURI2.pathparts.length-1];
-	// There is some kind of issue with the https://www.facebook.com/photo/download/? links.
-	//		They work fine when copy/pasted into browser, but not in background I guess.
-	//		So we use the other link that was inside the URL, seems to work for me
-	p.photourl=altphotourl;
-	
-	//var orig_name = p.photourl.match(/\/([^\/?]+)(?:\?.*)?$/)[1];
-	//console.log("p.photourl ["+p.photourl+"]");
-	//console.log("Becomes ["+orig_name+"]");
 	switch (O.naming) 
 	{
 		case 0:		p.outfile.append(sanitise_fn(padded_number(p) + (p.video ? '.mp4' : '.jpg')));		break;		// as of current knowledge, all videos are .mp4 and all photos are .jpg
