@@ -506,12 +506,16 @@ function handle_photo_page(p, r)
 	} 
 	else 
 	{
+		// CHANGES 12/12/2015 Finally got the FB update to how this all works
 		var link = _(r.response.querySelectorAll('a')).filter(
-			function(x) { return (x.rel == 'ignore') && (x.className == 'fbPhotosPhotoActionsItem'); })[0];
-		var img = r.response.querySelector('.fbPhotoImage');
+			//function(x) { return (x.rel == 'ignore') && (x.className == 'fbPhotosPhotoActionsItem'); }
+			function(x) { return (x.rel == 'ignore')&&(x.href.indexOf("download")!=-1); }
+			)[0];
+		//var img = r.response.querySelector('.fbPhotoImage');
+		var img = r.response.querySelector('.spotlight');
 		if (!link && !img) 
 		{
-			p.log( 'error: no photo found on photo page, are you' + 'accepting third party cookies?' );
+			p.log( 'error: no photo found on photo page, are you ' + 'accepting third party cookies?' );
 			p.set_status('error');
 			Pa--;
 			Pd++;
