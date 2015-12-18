@@ -1,3 +1,3 @@
-@ Make the xpi file
+@REM Make the xpi file
 
 jar -cMf facepaste.xpi .\
