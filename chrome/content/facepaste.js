@@ -392,8 +392,13 @@ function handle_album_index(a, ai)
 	a.log('parsing album index');
 	var bcd = browser.contentDocument;
 	//CHANGES 12/12/2015 The videos aren't marked by uiVideoLink anymore, but by theater and "videso" in the url i think?
-	var video_links=_(bcd.querySelectorAll("a")).filter( function(x) { return (x.rel=="theater")&&(x.href.indexOf("videos")!=-1);});
+	var allLinks=bcd.querySelectorAll("a");
+	var video_links=_(allLinks).filter( function(x) { return (x.rel=="theater")&&(x.href.indexOf("videos")!=-1);});
 	var photo_page_links = _(bcd.querySelectorAll('a.uiMediaThumb:not(.uiMediaThumbAlb):not(.albumThumbLink)' + ', a.uiVideoLink'));
+	if(photo_page_links.length==0 && video_links.length)
+	{//searching is expensive and i'm already doing two of them. Some users report not having rel="theater"
+		video_links=_(allLinks).filter( function(x) { return (x.href.indexOf("videos")!=-1);});
+	}
 	a.log('found ' + photo_page_links.length + ' photos');
 	a.log('found ' + video_links.length + ' videos');
 	photo_page_links.forEach(function(x) {
