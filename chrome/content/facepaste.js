@@ -4,12 +4,12 @@
 // Quick&Dirty URL object by Plater
 function buildURIObject(str)
 {
-	var retval={};
-	retval.Org=str;
+	var retval={Org:str,clipped:"",query:"",pathparts:[""],params:{}};
+	//retval.Org=str;
 	retval.clipped=retval.Org;
-	retval.query="";
-	retval.pathparts=[""];
-	retval.params={};
+	//retval.query="";
+	//retval.pathparts=[""];
+	//retval.params={};
 	
 	var splitspot=str.indexOf("?");
 	if(splitspot!=-1)	
@@ -35,7 +35,6 @@ function splitQuery(strQ)
 	return retval;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
-
 
 var Cc = Components.classes;
 var Ci = Components.interfaces;
@@ -68,6 +67,7 @@ if(useSavedPrefs==1)
 if (userOptions.maxPhotosAtATime<1){userOptions.maxPhotosAtATime=1;}
 
 const {Downloads} = Cu.import("resource://gre/modules/Downloads.jsm", {});//go ahead and try it out?
+Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
 var browser;
 var outdir = Cc["@mozilla.org/file/directory_service;1"].getService(Components.interfaces.nsIProperties).get("DfltDwnld", Components.interfaces.nsIFile);
@@ -86,7 +86,7 @@ function $b(elsel) {	return $q(browser.contentDocument, elsel);}
 function $$(elsel) {	return $(elsel)[0];}
 function $$c(elsel) {	return $c(elsel)[0];}
 function $$b(elsel) {	return $b(elsel)[0];}
-function E(selector, event, func) {	$(selector).forEach(function(e) {		e.addEventListener(event, func, false);	}); }
+function E(selector, event, func) {		$(selector).forEach(function(e) {		e.addEventListener(event, func, false);	}); }
 function Ec(selector, event, func) {	$c(selector).forEach(function(e) {		e.addEventListener(event, func, false);	}); }
 function ER(selector, event, func) {	$(selector).forEach(function(e) {		e.removeEventListener(event, func, false);	}); }
 
@@ -114,11 +114,9 @@ function padded_number(p)
 }
 
 function log(message) 
-{
+{ // TODO: need a solution that looks better; setting value scrolls to the top, which when followed by scrolling to the bottom causes flickering
 	var x = $$('#log');
 	x.value += message + '\n';
-	// TODO: need a solution that looks better; setting value scrolls to the
-	// top, which when followed by scrolling to the bottom causes flickering
 	x.selectionStart = x.value.length;
 	x.selectionEnd = x.value.length;
 }
@@ -130,9 +128,9 @@ function ajax(url, rtype, success, failure)
 	if (rtype) { r.responseType = rtype; }
 	r.onload = function() 
 	{
-		if (r.readyState < 4)			return;
-		if (r.status >= 200 && r.status < 300)			success(r);
-		if (r.status >= 400 && r.status < 600)			failure(r);
+		if (r.readyState < 4) { return; }
+		if (r.status >= 200 && r.status < 300) { success(r); }
+		if (r.status >= 400 && r.status < 600) { failure(r); }
 	};
 	r.onerror = function() {		failure(r);	};
 	r.send(null);
@@ -150,9 +148,9 @@ function new_browser()
 
 function init() 
 {
-	console.log(O.type);
+	console.log("O.type="+O.type);
 	if (O.type == 'user_albums') { fetch_album_list(); }// autoscroll albums page before calling get_available_albums
-	else {get_available_albums(); }// call get_available_albums directly; current page is an album
+	else {  get_available_albums(); }// call get_available_albums directly; current page is an album
 	E('#albums', 'select', start_enable);
 	E('#browse', 'command', browse);
 	E('#start', 'command', start);
@@ -176,8 +174,7 @@ function start()
 {
 	O.naming = $$('#naming').selectedIndex;
 	O.albumexists = $$('#albumexists').selectedIndex;
-	// get_selected_albums MUST be called before hiding the lobby because
-	// when a XUL listbox is hidden, its selection state is destroyed
+	// get_selected_albums MUST be called before hiding the lobby because when a XUL listbox is hidden, its selection state is destroyed
 	get_selected_albums();
 	$$('#lobby').hidden = true;
 	$$('#engine').hidden = false;
@@ -193,7 +190,8 @@ function cancel() {	close();}
 
 /* object structures */
 
-function Album() {
+function Album() 
+{
 	this.name = '';		this.url = '';
 	this.outdir = null;	this.number = 0;
 	this.photos = [];	this.status = 'waiting';
@@ -201,7 +199,6 @@ function Album() {
 	this.set_status = function(status) {		this.status = status;		this.dot.className = status;	};
 	this.log = function(message) {		log('(album ' + this.number + ') ' + message);	};
 }
-
 function Photo() 
 {
 	this.pageurl = '';	this.photourl = '';
@@ -212,6 +209,18 @@ function Photo()
 	this.update_tooltip = function() 	{		this.dot.setAttribute('tooltiptext', 'Album ' + this.album.number + ': ' + this.album.name + '\n' + 'Photo ' + this.number + ' of ' + this.album.photos.length + '\n' + 'URL: ' + (this.photourl || 'not yet known') );	};
 	this.log = function(message) {		log('(album ' + this.album.number +			' photo ' + this.number + ') ' + message);	};
 }
+function CreateAlbum(theName,theURL) {	var a = new Album;	a.name = theName;	a.url = theURL;	return a; }
+function CreatePhoto(theHref,theNumber,isVideo) {	var p = new Photo;	p.pageurl = theHref;	p.number = theNumber;	p.video = isVideo;	return p; }
+//////////////////////////////////////////////////////////////////////////////////////////
+function CreateBrowserElement()
+{
+	var retval = document.createElementNS( 'http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul', 'browser');
+	retval.setAttribute('type', 'content');
+	document.documentElement.appendChild(retval);
+	return retval;
+}
+function DeleteBrowserElement(thebrowser){	if (thebrowser) {thebrowser.parentNode.removeChild(thebrowser);}	}
+///////////////////////////////////////////////////////////////////////////////////////////
 
 /* behind the scenes */
 
@@ -257,15 +266,33 @@ function get_page_description()
 function fetch_album_list() 
 {
 	new_browser();
+	console.log("Browser loading: "+C.location.toString())
+	var myPListener = {};
+	//{
+		myPListener.QueryInterface= XPCOMUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]);
+		//myPListener.onStateChange= function(aWebProgress, aRequest, aFlag, aStatus) { console.log("StateChange: "+aStatus);};
+		myPListener.onLocationChange= function(aProgress, aRequest, aURI, aFlag) { console.log("LocationsChanged: "+aURI); };
+		//myPListener.onProgressChange= function(aWebProgress, aRequest, curSelf, maxSelf, curTot, maxTot) {console.log("onProgressChange: "+curSelf+" / "+maxSelf+", "+curTot+" / "+maxTot+"");  };
+		//myPListener.onStatusChange=function(aWebProgress, aRequest, aStatus, aMessage) { console.log("StatusChange: "+aStatus + " and\r\n"+aMessage); };
+	//};
+	//browser.addProgressListener(myPListener);
+	//gBrowser.removeProgressListener(myListener);
+
 	E(browser, 'DOMContentLoaded', begin_scrolling.bind( global, get_available_albums));
+	E(browser, 'readystatechange', function(){ console.log("readystatechange");} );//begin_scrolling.bind( global, get_available_albums));
+	E(browser, 'load', function(){ console.log("load");} );//begin_scrolling.bind( global, get_available_albums));
+	console.log("Start: "+new Date().toLocaleString());
 	browser.loadURI(C.location.toString());
 }
 
 function get_available_albums() 
 {
+	console.log("End: "+new Date().toLocaleString());
+	console.log("Called get_available_albums()");
 	var list = $$('#albums');
 	if (O.type == 'user_albums') 
 	{
+		console.log("Should be looking for user albums");
 		$b('li:not(.fbPhotosRedesignNavSelected) ' + '.fbPhotosRedesignNavContent').map(function(x, i, links) 
 		{
 			var a = new Album;
@@ -297,6 +324,7 @@ function get_available_albums()
 		});
 	} else 
 	{
+		console.log("NOT looking for user albums");
 		var a = new Album;
 		a.name = get_page_description();
 		a.url = C.location.toString();
@@ -351,17 +379,9 @@ function start_album(i)
 					case 1: a.log('album folder exists: skipping album'); break;
 				}
 				break;
-			default:
-				a.log('error creating album folder: ' + e.message);
-				break;
+			default: a.log('error creating album folder: ' + e.message); break;
 		}
-		if (error_occurred) 
-		{
-			a.set_status('error');
-			Ad++;
-			if (A[i + 1]){ start_album(i + 1); }
-			return;
-		}
+		if (error_occurred) { a.set_status('error');			Ad++;			if (A[i + 1]){ start_album(i + 1); }			return; }
 	}
 	a.log('fetching album index');
 	new_browser();
@@ -373,10 +393,8 @@ function begin_scrolling(callback, event)
 {
 	if (event.target instanceof Ci.nsIDOMHTMLDocument && event.target != browser.contentDocument) { return; }// run once for the main document, not for frames too
 	var x = 0, y = 0;
-	// we previously removed the listener that triggered this function here,
-	// but even when using the theoretically perfect arguments.callee, the
-	// listener never seemed to remove properly, so we now just delete and
-	// recreate a new browser element each use
+	// we previously removed the listener that triggered this function here, but even when using the theoretically perfect arguments.callee, the
+	// listener never seemed to remove properly, so we now just delete and recreate a new browser element each use
 	var bcw = browser.contentWindow;
 	E(bcw, 'scroll', function() { y++; });
 	var t = bcw.setInterval(function() 
@@ -401,26 +419,13 @@ function handle_album_index(a, ai)
 	}
 	a.log('found ' + photo_page_links.length + ' photos');
 	a.log('found ' + video_links.length + ' videos');
-	photo_page_links.forEach(function(x) {
-			var p = new Photo;
-			p.pageurl = x.href;
-			p.number = a.photos.length + 1;
-			p.video = x.classList.contains('uiVideoLink');
-			p.album = a;			P.push(p);			a.photos.push(p);
-		});
-	video_links.forEach(function(x) {
-			var p = new Photo;
-			p.pageurl = x.href;
-			p.number = a.photos.length + 1;
-			p.video = true;//x.classList.contains('uiVideoLink');
-			p.album = a;			P.push(p);			a.photos.push(p);
-		});
+	photo_page_links.forEach(function(x) {			var p = CreatePhoto(x.href, a.photos.length+1,x.classList.contains('uiVideoLink'));			p.album = a;			P.push(p);			a.photos.push(p);		});
+	video_links.forEach(function(x) {			var p = CreatePhoto(x.href, a.photos.length+1,true);			p.album = a;			P.push(p);			a.photos.push(p);		});
 	a.photos.forEach(function(p) {		p.update_tooltip();	});
 	a.set_status('complete');
 	Ad++;
 	if (A[ai + 1]){		start_album(ai + 1);}
 }
-
 function queue_poll() 
 {
 	if (A.length == Ad && P.length == Pd) 
@@ -442,74 +447,69 @@ function get_photo(p)
 {
 	Pa++;
 	p.set_status('preparing');
-	ajax(p.pageurl, 'document',		handle_photo_page.bind(global, p),		handle_photo_page_error.bind(global, p));
+	// VIDEOs should use the ajax and then parse the page for the url
+	// PHOTOs should use a brower element and wait until img.spotlight gets a hit
+	if(p.video)	{ ajax(p.pageurl, 'document', handle_video_page.bind(global, p), handle_photo_page_error.bind(global, p)); }
+	else { browserLoadPhotoPage(p);	}
 }
 
-function handle_photo_page(p, r) 
+function ILoadedAPage(myBrowser,p)
+{
+	console.log("Browser content loaded: "+p.pageurl);	
+	var bcd = myBrowser.contentDocument;
+	//DebugShowImages(bcd);
+	var spotlightimages=bcd.querySelectorAll("img.spotlight");
+	if(spotlightimages.length==1) //TODO what if a spotlight never loads??
+	{
+		p.log('successfully received photo page, creating photo file');
+		p.photourl=spotlightimages[0].src;
+		console.log("Found my image: "+spotlightimages[0].src);
+		var myuri=buildURIObject(p.photourl);
+		var orig_name = myuri.pathparts[myuri.pathparts.length-1];
+		DeleteBrowserElement(myBrowser);
+		downloadAFile(p,orig_name);
+	}
+}
+function browserLoadPhotoPage(p)
+{
+	var myBrowser = CreateBrowserElement();//browser;
+	E(myBrowser, 'DOMContentLoaded',function(event){ILoadedAPage(myBrowser,p);});
+	myBrowser.loadURI(p.pageurl);	
+}
+function handle_video_page(p, r) 
 {
 	p.log('successfully received photo page, creating photo file');
-	var orig_name="";
-	if (p.video) 
-	{
-		//document.querySelectorAll("video")[0].src; //only gets SD
-		var hdmatch = r.response.body.innerHTML.match( /hd_src\\u002522\\u00253A\\u002522(.*?)\\u002522/);
-		var sdmatch = r.response.body.innerHTML.match( /sd_src\\u002522\\u00253A\\u002522(.*?)\\u002522/);
-		p.photourl = decodeURIComponent(JSON.parse( '"' + (hdmatch || sdmatch)[1] + '"')).			replace(/\\/g, '');
-		//console.log("Found video at: "+p.photourl);
-		var myVideoURL=buildURIObject(p.photourl);
-		orig_name = myVideoURL.pathparts[myVideoURL.pathparts.length-1];
-	} 
-	else 
-	{
-		// CHANGES 12/12/2015 Finally got the FB update where all of this had changed
-		// reference: function _(iterable) {	return Array.prototype.slice.call(iterable);}
-		var img;
-		var link;		
-		//console.log("I am looking at: "+p.pageurl);
-		// CHANGES 12/09/15 By Plater
-		//p.pageurl=https://www.facebook.com/photo.php?fbid=1003456761439&set=t.1201736380&type=3&src=https%3A%2F%2Fscontent-lga3-1.xx.fbcdn.net%2Fhphotos-xpf1%2Fv%2Ft1.0-9%2F197055_1003456761439_39_n.jpg%3Foh%3D23ce724b67a738736a1ee33b08e5c90b%26oe%3D56ECDD44&size=604%2C453
-		//p.photourl=https://www.facebook.com/photo/download/?fbid=1003456761439
-		//p.photourl is only like that if it finds the download link
-		//	p.photourl triggers a download of 197055_1003456761439_39_n.jpg
-		//	inside p.pageurl is an encoded version of that filename
-		//		Unencoded= https://scontent-lga3-1.xx.fbcdn.net/hphotos-xpf1/v/t1.0-9/197055_1003456761439_39_n.jpg?oh=23ce724b67a738736a1ee33b08e5c90b&oe=56ECDD44&size=604,453
-		
-		var myOURI=buildURIObject(p.pageurl);
-		var myOURI2=buildURIObject((myOURI.params["src"]||""));
-		var altphotourl=myOURI2.Org;
-		orig_name = myOURI2.pathparts[myOURI2.pathparts.length-1];
-		// There is some kind of issue with the https://www.facebook.com/photo/download/? links.
-		//		They work fine when copy/pasted into browser, but not in background I guess.
-		//		So we use the other link that was inside the URL, seems to work for me
-		p.photourl=altphotourl;
-		img={'src':altphotourl};
-		
-		if (!link && !img) 
-		{
-			p.log( 'error: no photo found on photo page, are you ' + 'accepting third party cookies?' );
-			p.set_status('error');			Pa--;			Pd++;
-		}
-		// fall back to img src when no download link, e.g. cover photos
-		p.photourl = link ? link.href : img.src;
-	}
+	var hdmatch = r.response.body.innerHTML.match( /hd_src\\u002522\\u00253A\\u002522(.*?)\\u002522/);
+	var sdmatch = r.response.body.innerHTML.match( /sd_src\\u002522\\u00253A\\u002522(.*?)\\u002522/);//document.querySelectorAll("video")[0].src; //only gets SD
+	p.photourl = decodeURIComponent(JSON.parse( '"' + (hdmatch || sdmatch)[1] + '"')).			replace(/\\/g, '');
+	var myVideoURL=buildURIObject(p.photourl);
+	var orig_name = myVideoURL.pathparts[myVideoURL.pathparts.length-1];
+	downloadAFile(p,orig_name);
+}
+function downloadAFile(p,orig_name)
+{
 	p.set_status('downloading');
 	p.outfile = p.album.outdir.clone();
-	
 	switch (O.naming) 
 	{
 		case 0:		p.outfile.append(sanitise_fn(padded_number(p) + (p.video ? '.mp4' : '.jpg')));		break;		// as of current knowledge, all videos are .mp4 and all photos are .jpg
 		case 1:		p.outfile.append(sanitise_fn(orig_name));		break;
 		case 2:		p.outfile.append(sanitise_fn(padded_number(p) + '_' + orig_name));		break;
 	}
-	try {		p.outfile.create(Ci.nsIFile.NORMAL_FILE_TYPE, 0644);	} 
+	//console.log("orig_name="+orig_name); 	console.log("File Target: "+p.outfile.target);	
+	try 
+	{	
+		//var bExists=p.outfile.exists();				p.log("Creating file: ["+p.outfile.target+"] "+bExists+", "+"")
+		p.outfile.create(Ci.nsIFile.NORMAL_FILE_TYPE, 0644);	
+	} 
 	catch (e) 
-	{
+	{	
 		switch (e.result) 
 		{
-			case Cr.NS_ERROR_FILE_NOT_FOUND:		p.log('error creating photo file: path too long');			break;
+			case Cr.NS_ERROR_FILE_NOT_FOUND:		p.log('error creating photo file: path too long: ' + e.message);			break;
 			case Cr.NS_ERROR_FILE_ACCESS_DENIED:	p.log('error creating photo file: access denied');			break;
 			case Cr.NS_ERROR_FILE_ALREADY_EXISTS:	p.log('error creating photo file: file exists');			break;
-			default:			p.log('error creating photo file: ' + e.message);			break;
+			default:								p.log('error creating photo file: ' + e.message);			break;
 		}
 		p.set_status('error');		Pa--;		Pd++;
 		return;
@@ -523,8 +523,9 @@ function handle_photo_page(p, r)
 	
 	// createDownload() is supposed to take an object with all the serialize-able stuff from here:
 	//https://dxr.mozilla.org/mozilla-central/source/toolkit/components/jsdownloads/src/DownloadCore.jsm
-	var aProperties = 	{		source: {url:p.photourl, isPrivate:!userOptions.showPhotosInDownloadHistory},		target: p.outfile	};	
 	
+	var aProperties = 	{		source: {url:p.photourl, isPrivate:!userOptions.showPhotosInDownloadHistory},		target: p.outfile	};	
+
 	var promDownloader = Downloads.createDownload(aProperties);
 	promDownloader.then(
 		function(val)  //promiseobj.then(onFulfilled, onRejected);
@@ -532,7 +533,7 @@ function handle_photo_page(p, r)
 			var promStart = val.start();
 			promStart.then(
 				function(fulfilment) { handle_photo_success(p); },//fulfilment
-				function(reason) { handle_photo_error(p,{responseStatus:500,responseStatusText:"Unknown Error (facepaste downloading)"}); }//rejection
+				function(reason) { console.log(reason);handle_photo_error(p,{responseStatus:500,responseStatusText:"Unknown Error (facepaste downloading)"}); }//rejection
 			);
 		},
 		function(failVal) { handle_photo_error(p,{responseStatus:500,responseStatusText:"Unknown Error (facepaste creating API download)"}); }
