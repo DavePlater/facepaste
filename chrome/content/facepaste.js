@@ -5,11 +5,7 @@
 function buildURIObject(str)
 {
 	var retval={Org:str,clipped:"",query:"",pathparts:[""],params:{}};
-	//retval.Org=str;
 	retval.clipped=retval.Org;
-	//retval.query="";
-	//retval.pathparts=[""];
-	//retval.params={};
 	
 	var splitspot=str.indexOf("?");
 	if(splitspot!=-1)	
@@ -47,8 +43,9 @@ var A = [], P = [];
 var Ad = 0, Pd = 0, Pa = 0;
 var userOptions=
 {
-	maxPhotosAtATime:10,//used to be a hardcoded 8
-	showPhotosInDownloadHistory:false
+	maxPhotosAtATime:3,//used to be a hardcoded 8
+	showPhotosInDownloadHistory:false,
+	maxTimeToSearchForImageMS:60*1000
 	//,whichFilenameTypeSelected:1 //(selectedIndex)
 }; // I want these options to be user settable
 
@@ -141,7 +138,8 @@ function new_browser()
 	if (browser)		{browser.parentNode.removeChild(browser);}
 	browser = document.createElementNS(		'http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul',		'browser');
 	browser.setAttribute('type', 'content');
-	document.documentElement.appendChild(browser);
+	oBrowserBox.appendChild(browser);
+	//document.documentElement.appendChild(browser);
 }
 
 /* main actions */
@@ -170,6 +168,7 @@ function browse()
 	console.log(outdir);
 }
 
+var oBrowserBox;
 function start() 
 {
 	O.naming = $$('#naming').selectedIndex;
@@ -179,6 +178,10 @@ function start()
 	$$('#lobby').hidden = true;
 	$$('#engine').hidden = false;
 	sizeToContent();
+	//Add a DIV to hold all those browser objects
+	oBrowserBox=document.createElement('div');
+	document.documentElement.appendChild(oBrowserBox);
+	
 	log('Preparing to download ' + A.length + ' album' + (A.length ? 's' : '') + ':');
 	A.forEach(function(a) {		a.log(a.name);	});
 	log('________________________________');
@@ -186,7 +189,7 @@ function start()
 	start_album(0);
 }
 
-function cancel() {	close();}
+function cancel() {	DeleteBrowserElement(oBrowserBox); close();} //TODO delete all objects first??
 
 /* object structures */
 
@@ -201,6 +204,7 @@ function Album()
 }
 function Photo() 
 {
+	this.StartLoadTime=0;
 	this.pageurl = '';	this.photourl = '';
 	this.album = null;	this.number = 0;
 	this.video = false;	this.status = 'waiting';
@@ -216,7 +220,8 @@ function CreateBrowserElement()
 {
 	var retval = document.createElementNS( 'http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul', 'browser');
 	retval.setAttribute('type', 'content');
-	document.documentElement.appendChild(retval);
+	oBrowserBox.appendChild(retval);
+	//document.documentElement.appendChild(retval);
 	return retval;
 }
 function DeleteBrowserElement(thebrowser){	if (thebrowser) {thebrowser.parentNode.removeChild(thebrowser);}	}
@@ -440,7 +445,7 @@ function queue_poll()
 		get_photo(waiting[0]);
 		waiting = P.filter(function(x) { return x.status == 'waiting';		});
 	}
-	setTimeout(queue_poll, 500);
+	setTimeout(function(){queue_poll();}, 500);
 }
 
 function get_photo(p) 
@@ -459,7 +464,7 @@ function ILoadedAPage(myBrowser,p)
 	var bcd = myBrowser.contentDocument;
 	//DebugShowImages(bcd);
 	var spotlightimages=bcd.querySelectorAll("img.spotlight");
-	if(spotlightimages.length==1) //TODO what if a spotlight never loads??
+	if(spotlightimages.length>=1) //TODO what if a spotlight never loads??
 	{
 		p.log('successfully received photo page, creating photo file');
 		p.photourl=spotlightimages[0].src;
@@ -467,15 +472,34 @@ function ILoadedAPage(myBrowser,p)
 		var myuri=buildURIObject(p.photourl);
 		var orig_name = myuri.pathparts[myuri.pathparts.length-1];
 		DeleteBrowserElement(myBrowser);
+		clearTimeout(p.tmCancel);
 		downloadAFile(p,orig_name);
 	}
+}
+function ISRFunc(strMsg,p,o)
+{
+	console.log("ISRFunc("+strMsg+") for p.number="+p.number+" "+(o.message||""));	
 }
 function browserLoadPhotoPage(p)
 {
 	var myBrowser = CreateBrowserElement();//browser;
-	E(myBrowser, 'DOMContentLoaded',function(event){ILoadedAPage(myBrowser,p);});
+	E(myBrowser, 'DOMContentLoaded',function(event){ ILoadedAPage(myBrowser,p); } );
+	E(myBrowser, 'load',function(event){ISRFunc("load",p,event); } );
+	E(myBrowser, 'abort',function(event){ISRFunc("abort",p,event); } );
+	E(myBrowser, 'error',function(event){ISRFunc("error",p,event); } );
+	E(myBrowser, 'loadend',function(event){ISRFunc("loadend",p,event); } );
+	p.StartLoadTime=new Date();
+	p.tmCancel=setTimeout(function(){ cancelBrowerPage(myBrowser,p); }, userOptions.maxTimeToSearchForImageMS);//what if i attached an setTimeout() that worked as a canel button?
 	myBrowser.loadURI(p.pageurl);	
 }
+function cancelBrowerPage(aBrowser,p)
+{
+	console.log("cancelBrowerPage() called for p.number="+p.number);
+	handle_photo_page_error(p,{status:"Timeout searching for photo file"});
+	DeleteBrowserElement(aBrowser);
+	//p.log('Timeout searching for photo file');	
+}
+
 function handle_video_page(p, r) 
 {
 	p.log('successfully received photo page, creating photo file');
